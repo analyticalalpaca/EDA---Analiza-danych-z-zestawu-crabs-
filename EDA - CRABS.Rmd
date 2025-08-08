@@ -1,0 +1,334 @@
+---
+title: "EDA - Analiza danych z zestawu 'crabs' " 
+date: "2024-12-17"
+output: 
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+# 0. Wprowadzenie
+
+Zestaw danych `crabs` składa się z 200 obserwacji dotyczących krabów, w tym 100 obserwacji dla każdego z dwóch gatunków: Blue (B) i Orange (O). W danych zawarte są cechy fizyczne krabów, które mogą być wykorzystane do analizy statystycznej, w tym do klasyfikacji gatunków. Dla zainteresowanych osób podrzucam badanie, które było inspiracją do stworzenia tego zestawu danych:
+
+[Campbell, N.A. and Mahon, R.J. (1974) A multivariate study of variation in two species of rock crab of genus Leptograpsus. Australian Journal of Zoology 22, 417–425.](https://www.researchgate.net/publication/243766527_A_multivariate_study_of_variation_in_two_species_of_rock_crab_of_genus_Leptograpsus)
+
+## 0.1 Pakiety
+
+Będę korzystał z następujących bibliotek:
+
+```{r, warning=FALSE, message=FALSE}
+library(psych)
+library(MASS)
+library(knitr)
+library(ggplot2)
+library(mice)
+library(dplyr)
+```
+
+
+## 0.2 Zmienne
+
+
+Zestaw danych `crabs` z pakietu `MASS` zawiera 8 zmiennych, z czego 3 stanowią 
+zmienne kategoryczne a pozostałe 5 zmienne numeryczne, których wartości zostały 
+wyrażone w milimetrach (mm). Poniżej przedstawiłem informacje dotyczące danych 
+zawartych w poszczególnych zmiennych.
+
+ **Kategoryczne:**
+ 
+- `sp`: Gatunek kraba. Odpowiednio "B"oznacza odmianę niebieską a "O" 
+pomarańczową.
+- `sex`: Płeć kraba. Odpowiednio "F" zonacza płeć żeńską a "M" płeć męską.
+
+ **Numeryczne:**
+
+- `FL`: Rozmiar płata czołowego u kraba
+- `RW`: Szerokość tylnej części kraba czyli w najwęższym miejscu ciała kraba
+- `CL`: Długość karapaksu czyli twardej, zewnętrznej powłoki ciała kraba, która 
+osłania jego głowę oraz część klatki piersiowej.
+- `CW`: Szerokość karapaksu
+- `BD`: Głębokość ciała kraba.
+
+
+# 1. Dane
+## 1.1 Tabela z danymi
+
+```{r, comment = NA}
+crabs
+```
+
+## 1.2 Struktura zestawu danych
+
+```{r, comment = NA}
+str(crabs)
+```
+## 1.3 Podstawowe statystyki
+
+Ze względu na to że zestaw danych `crabs` zawiera zmienne `sex` oraz `sp` (reprezentuje ona dwa gatunki krabów), postanowiłem sprawdzić podstawowe statystyki dla każdej grupy w zależności od płci oraz rasy.
+
+```{r, comment = NA}
+describeBy(crabs[, 4:8], group = interaction(crabs$sp, crabs$sex))
+```
+## 1.4 Braki danych w zestawie
+
+W tym przypadku wykorzystałem funkcje `md.pattern()` z pakietu `mice`. Rozwiązanie to umożliwia mi szybkie sprawdzenie czy w danym zbiorze danych znajdują się braki danych `NA`. Nie ukrywam że funkcję tę poznałem dzięki jednej z przykładowych prac podanych na platformie UPEL. Poniższy wynik wskazuje że baza danych nie zawiera braków dlatego można przejść już do właściwego etapu analizy danych.
+
+```{r, comment = NA}
+md.pattern(crabs, rotate.names = TRUE)
+```
+
+
+# 2. Różnice międzygatunkowe wśród krabów
+## 2.1 Jak różnią się pod względem rozmiaru płata czołowego? (zmienna FL)
+
+```{r}
+ggplot(crabs, aes(x = sp, y = FL, fill = sp)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#4682B4", "#FF6347")) + 
+  labs(title = "Długość płata czołowego krabów",
+       x = "Gatunek",
+       y = "Szerokość ciała (mm)") +
+  theme_minimal() +
+  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Samice", "M" = "Samce")))
+```
+```{r}
+stats_crabs_FL <- crabs %>%
+  group_by(sex, sp) %>%
+  summarise(
+    Min = min(FL),               
+    Q1 = quantile(FL, 0.25),     
+    Median = median(FL),         
+    Q3 = quantile(FL, 0.75),     
+    Max = max(FL),               
+    .groups = "drop"             
+  )
+
+stats_crabs_FL
+```
+
+Dla samic krabów, widać, że płaty czołowe samic Gatunku B są najmniejsze, z minimalnym rozmiarem wynoszącym 7.2, a maksymalnym 19.2. Mediana (13.15) oraz pozostałe kwartyle wskazują na względnie mały rozrzut rozmiarów w tej grupie. Natomiast samice typu Orange (O) mają wyraźnie większe płaty czołowe, z minimalnym rozmiarem 10.7 i maksymalnym 23.1. Mediana wynosi 18.0, a kwartyla 3. (19.9) wskazuje na szerszy zakres wielkości, co sugeruje większą zmienność w tej grupie.Z kolei dla samców, zauważamy podobny trend. Samce gatunku B mają płaty czołowe o rozmiarze od 8.1 do 21.3, z medianą wynoszącą 15.1, co także plasuje ich w podobnym zakresie jak samice tego typu. Samce gatunku O mają płaty czołowe o rozmiarze od 9.1 do 23.1, z medianą 16.7. Wartości te są nieco wyższe niż u samic typu Orange, co wskazuje, że w tej grupie samce mają nieco większe płaty czołowe niż samice.
+
+## 2.2 Jak różnią się pod względem szerokości tylnej części kraba? (zmienna RW)
+
+```{r}
+ggplot(crabs, aes(x = sp, y = RW, fill = sp)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#4682B4", "#FF6347")) +
+  labs(title = "Szerokość tylnej części krabów",
+       x = "Gatunek",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Samice", "M" = "Samce")))
+```
+```{r}
+stats_crabs_RW <- crabs %>%
+  group_by(sex, sp) %>%
+  summarise(
+    Min = min(RW),               
+    Q1 = quantile(RW, 0.25),     
+    Median = median(RW),         
+    Q3 = quantile(RW, 0.75),     
+    Max = max(RW),               
+    .groups = "drop"             
+  )
+
+stats_crabs_RW
+```
+
+Gatunek krabów O charakteryzuje się wyraźnie większą średnią i bardziej jednorodną tylnią szerokością pancerza (RW) niż gatunek B, zarówno u samic, jak i samców. Kraby gatunku O mają większe rozmiary w tej cesze, a ich rozrzut wielkości jest mniejszy, co sugeruje mniejszą zmienność wewnątrz grupy. Z kolei gatunek B wykazuje większą zmienność, co może wskazywać na większą różnorodność rozmiarów w tej populacji.
+
+## 2.3 Jak różnią się pod względem długości karapaksu? (zmienna CL)
+
+```{r}
+ggplot(crabs, aes(x = sp, y = CL, fill = sp)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#4682B4", "#FF6347")) +
+  labs(title = "Długość karpaksu",
+       x = "Gatunek",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Samice", "M" = "Samce")))
+```
+```{r}
+stats_crabs_CL <- crabs %>%
+  group_by(sex, sp) %>%
+  summarise(
+    Min = min(CL),               
+    Q1 = quantile(CL, 0.25),     
+    Median = median(CL),         
+    Q3 = quantile(CL, 0.75),     
+    Max = max(CL),               
+    .groups = "drop"             
+  )
+
+stats_crabs_CL
+```
+
+Samice gatunku B mają długość karapaksu w zakresie od 14,7 mm do 40,9 mm, podczas gdy samice gatunku O mają mniejszy zakres – od 21,4 mm do 46,2 mm. U samców gatunku B długość karapaksu waha się od 16,1 mm do 47,1 mm, natomiast w gatunku O mieści się w przedziale od 16,7 mm do 47,6 mm. Choć gatunek B ma szerszy zakres długości, kraby gatunku O osiągają większe rozmiary. Mediana długości karapaksu dla samic gatunku O to 34,7 mm, a dla samic gatunku B wynosi 27,9 mm. U samców mediana dla gatunku O to 33,35 mm, a dla gatunku B 32,45 mm. Oznacza to, że karapaks krabów gatunku O jest średnio większy i bardziej jednorodny, podczas gdy gatunek B wykazuje większą zmienność w rozmiarach.
+
+## 2.4 Jak różnią się pod względem szerokości karapaksu (zmienna CW)
+
+```{r}
+ggplot(crabs, aes(x = sp, y = CW, fill = sp)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#4682B4", "#FF6347")) +
+  labs(title = "Szerokość Karpaksu",
+       x = "Gatunek",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Samice", "M" = "Samce")))
+
+```
+```{r}
+stats_crabs_CW <- crabs %>%
+  group_by(sex, sp) %>%
+  summarise(
+    Min = min(CW),               
+    Q1 = quantile(CW, 0.25),     
+    Median = median(CW),         
+    Q3 = quantile(CW, 0.75),     
+    Max = max(CW),               
+    .groups = "drop"             
+  )
+
+stats_crabs_CW
+```
+
+W przypadku szerokości karapaksu (CW) największe różnice między gatunkami O i B  występują u samic, ale także u samców można zauważyć pewne różnice. U samic gatunku O mediana szerokości karapaksu wynosi 39.55 mm, co jest znacznie wyższe niż 32.35 mm u samic gatunku B. Z kolei wśród samców gatunku O mediana wynosi 36.30 mm, natomiast u samców gatunku B jest wyższa i wynosi 37.10 mm.Gatunek O cechuje się również szerszym zakresem szerokości karapaksu w porównaniu do gatunku B. U samic O wartości te mieszczą się w przedziale od 24.0 mm do 52.5 mm, podczas gdy samice B mają mniejszy zakres – od 17.1 mm do 47.9 mm. Podobnie u samców, szerokość karapaksu w gatunku O wynosi od 18.6 mm do 52.8 mm, a w gatunku B od 19.0 mm do 54.6 mm.
+
+## 2.5 Jak różnią się pod względem głębokości ciała? (zmienna BD)
+
+```{r}
+ggplot(crabs, aes(x = sp, y = BD, fill = sp)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#4682B4", "#FF6347")) +
+  labs(title = "Głębokość ciała",
+       x = "Gatunek",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Samice", "M" = "Samce")))
+```
+```{r}
+stats_crabs_BD <- crabs %>%
+  group_by(sex, sp) %>%
+  summarise(
+    Min = min(BD),               
+    Q1 = quantile(BD, 0.25),     
+    Median = median(BD),         
+    Q3 = quantile(BD, 0.75),     
+    Max = max(BD),               
+    .groups = "drop"             
+  )
+
+stats_crabs_BD
+```
+
+Głębokość ciała (BD) w przypadku badanych krabów różni się pomiędzy gatunkami, przy czym gatunek O wykazuje większe wartości niż gatunek B, zarówno u samic, jak i samców. Dla samic gatunku O mediana głębokości ciała wynosi 15,65 mm, podczas gdy dla samic gatunku B jest to 11,60 mm. U samców głębokość ciała w gatunku O ma medianę równą 15,00 mm, a w gatunku B 13,60 mm. Zakres głębokości ciała u samic gatunku O waha się od 9,7 mm do 21,1 mm, natomiast w gatunku B rozciąga się od 6,1 mm do 18,1 mm. W przypadku samców, głębokość ciała w gatunku O mieści się w przedziale od 7,4 mm do 21,6 mm, podczas gdy w gatunku B wynosi od 7,0 mm do 20,0 mm. Te różnice wskazują na to, że kraby gatunku O mają większą i bardziej jednorodną głębokość ciała, w porównaniu do krabów gatunku B, które wykazują szerszy zakres wartości.
+
+# 3.Zależności między zmiennymi
+## 3.1 Jaka jest zależność pomiędzy wielkością płata czołowego (FL) a szerokością karapaksu (CW)?
+
+
+```{r echo=TRUE}
+ggplot(crabs, aes(x = CL, y = CW, color = sex)) +
+  geom_point() +
+  scale_color_manual(values = c("F" = "#FF1493", "M" = "#1E90FF")) +  
+  labs(title = "Zależność pomiędzy długością (CL) a szerokością (CW) karapaksu",
+       x = "Długość (mm)",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sp, labeller = labeller(sp = c("B" = "Gatunek B", "O" = "Gatunek O")))  
+```
+```{r}
+crabs %>%
+  filter(sp %in% c("O", "B"), sex %in% c("F", "M")) %>%  
+  group_by(sp, sex) %>%  
+  summarise(correlation = cor(CL, CW, method = "pearson", use = "complete.obs"))  
+```
+
+Korelacje wśród samic i samców oraz pomiędzy gatunkami B i O są bardzo podobne co wskazuje na mniej więcej tak samo mocną zależność pomiędzy długością a szerokością karapaksu. Na podstawie jednej z tych zmiennych (np. CL) możemy bardzo dokładnie przewidzieć drugą zmienną (CW), ponieważ zmienne są silnie skorelowane w obrębie wszystkich grup.
+
+## 3.2 Jaka jest zależność pomiędzy szerokością tylnej części kraba (RW) a głębokością ciała (BD)?
+
+```{r}
+ggplot(crabs, aes(x = RW, y = BD, color = sex)) +
+  geom_point() +
+  scale_color_manual(values = c("F" = "#FF1493", "M" = "#1E90FF")) +  
+  labs(title ="Zależność pomiędzy szerokością tylniej części kraba (RW) a głębokości ciała (BD) ",
+       x = "Szerokość (mm)",
+       y = "Głębokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sp, labeller = labeller(sp = c("B" = "Gatunek B", "O" = "Gatunek O")))  
+```
+```{r}
+crabs %>%
+  filter(sp %in% c("O", "B"), sex %in% c("F", "M")) %>%  
+  group_by(sp, sex) %>%  
+  summarise(correlation = cor(RW, BD, method = "pearson", use = "complete.obs"))  
+```
+
+Wszystkie wartości korelacji między tylną szerokością pancerza (RW) a głębokością ciała (BD) w różnych grupach (gatunki i płcie) wskazują na silną dodatnią korelację w zakresie od 0.96 do 0.99. Oznacza to, że zmienne te rosną razem, tzn. w miarę wzrostu jednej z nich (np. RW), druga (BD) również rośnie w sposób proporcjonalny. Najsilniejsza korelacja została zaobserwowana u samców gatunku O, gdzie wartość wynosi 0.9874, co wskazuje na niemal idealną liniową zależność między tymi dwoma zmiennymi. Choć korelacje są silne we wszystkich grupach, samice gatunku O wykazują najniższą wartość korelacji (0.9609)
+
+## 3.3 Jaka jest zależność pomiędzy długością ciała (FL) a głębokością ciała kraba (BD)?
+
+```{r}
+ggplot(crabs, aes(x = FL, y = BD, color = sex)) +
+  geom_point() +
+  scale_color_manual(values = c("F" = "#FF1493", "M" = "#1E90FF")) +  
+  labs(title ="Zależność pomiędzy rozmiare płata czołowego (FL) a głębokością ciała kraba (BD)",
+       x = "Długość (mm)",
+       y = "Głębokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sp, labeller = labeller(sp = c("B" = "Gatunek B", "O" = "Gatunek O")))  
+```
+```{r}
+crabs %>%
+  filter(sp %in% c("O", "B"), sex %in% c("F", "M")) %>%  
+  group_by(sp, sex) %>%  
+  summarise(correlation = cor(FL, BD, method = "pearson", use = "complete.obs"))  
+```
+
+## 3.4 Jaka jest zależność pomiędzy wielkością płata czołowego (FL) a długością karapaksu (CL)?
+
+```{r}
+ggplot(crabs, aes(x = FL, y = CL, color = sex)) +
+  geom_point() +
+  scale_color_manual(values = c("F" = "#FF1493", "M" = "#1E90FF")) +  
+  labs(title = "Zależność pomiędzy wielkością płata czołowego (FL) a długością (CL) karapaksu",
+       x = "Długość (mm)",
+       y = "Szerokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sp, labeller = labeller(sp = c("B" = "Gatunek B", "O" = "Gatunek O"))) 
+```
+```{r}
+crabs %>%
+  filter(sp %in% c("O", "B"), sex %in% c("F", "M")) %>%  
+  group_by(sp, sex) %>%  
+  summarise(correlation = cor(FL, CW, method = "pearson", use = "complete.obs"))  
+```
+
+Korelacja pomiędzy wielkością płata czołowego (FL) a długością ciała (CL) w różnych grupach jest bardzo silna i dodatnia w każdym przypadku. Najwyższą korelację zaobserwowano u samic gatunku B, gdzie wynosi ona 0,9955, co sugeruje niemal idealną liniową zależność między FL a CL w tej grupie. Również u samców gatunku B (0,9948) oraz samców gatunku O (0,9943) korelacja jest wyjątkowo wysoka. Dla samic gatunku O korelacja wynosi 0,9896, co jest nieco niższą wartością, ale wciąż wskazuje na bardzo silną liniową zależność między tymi dwoma cechami.
+
+## 3.5 Jaka jest zależność pomiędzy długością karapaksu (CL) a głebokością ciała kraba (BD)?
+
+```{r}
+ggplot(crabs, aes(x = CL, y = BD, color = sex)) +
+  geom_point() +
+  scale_color_manual(values = c("F" = "#FF1493", "M" = "#1E90FF")) +  
+  labs(title = "Zależność długością karapaksu (CL) a głębokością ciała kraba (BD)",
+       x = "Długość (mm)",
+       y = "Głębokość (mm)") +
+  theme_minimal() +
+  facet_wrap(~sp, labeller = labeller(sp = c("B" = "Gatunek B", "O" = "Gatunek O"))) 
+```
+```{r}
+crabs %>%
+  filter(sp %in% c("O", "B"), sex %in% c("F", "M")) %>%  
+  group_by(sp, sex) %>%  
+  summarise(correlation = cor(CL, BD, method = "pearson", use = "complete.obs")) 
+```
+
+Podobnie jak wyżej Wartości korelacji pomiędzy długością ciała (CL) a głębokością ciała (BD) w różnych grupach wskazują na silną dodatnią korelację we wszystkich przypadkach. Wartości korelacji wynoszą od 0.9901 do 0.9969, co oznacza, że zmienne te mają bardzo silną liniową zależność,
+
